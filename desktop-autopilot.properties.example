@@ -1,0 +1,25 @@
+# Desktop Autopilot configuration
+profile=minimal
+enabled=true
+interval.seconds=6
+pixels=2
+mode=horizontal
+mouse.enabled=true
+
+# Sends balanced arrow-key pairs to the currently focused app.
+# Use this only when your editor or IDE is focused.
+keyboard.enabled=false
+keyboard.mode=horizontal
+
+# If true, autopilot moves only after no user mouse activity is detected.
+idle.only=false
+idle.seconds=60
+
+# Optional schedule. Supports overnight ranges, for example 22:00 to 06:00.
+schedule.enabled=false
+schedule.start=09:00
+schedule.end=18:00
+schedule.weekdays.only=true
+
+tray.enabled=true
+log.moves=true

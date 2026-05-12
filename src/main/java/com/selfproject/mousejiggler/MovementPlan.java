@@ -2,5 +2,5 @@ package com.selfproject.mousejiggler;
 
 import java.awt.Point;
 
-record MovementPlan(Point nextPoint, int nextDirection) {
+record MovementPlan(Point nextPoint, int nextXDirection, int nextYDirection) {
 }

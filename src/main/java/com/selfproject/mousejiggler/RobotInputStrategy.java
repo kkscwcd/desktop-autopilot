@@ -18,8 +18,10 @@ final class RobotInputStrategy implements InputStrategy {
 
     @Override
     public void pressKey(int javaKeyCode) {
-        robot.keyPress(javaKeyCode);
+        // Map F15 sentinel to Java's VK_F15 (0xF002)
+        int vk = (javaKeyCode == KeyboardJiggle.VK_F15_NATIVE) ? java.awt.event.KeyEvent.VK_F15 : javaKeyCode;
+        robot.keyPress(vk);
         robot.delay(25);
-        robot.keyRelease(javaKeyCode);
+        robot.keyRelease(vk);
     }
 }

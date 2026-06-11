@@ -16,11 +16,24 @@ mouse.enabled=true
 keyboard.enabled=false
 keyboard.mode=horizontal
 
-# Hardware keyboard jiggle: presses a random key (Space, Up, Down, Shift) at a
-# random interval between min and max seconds. Fires independently of the mouse cycle.
+# Hardware keyboard jiggle: presses a random key at a random interval.
+# Fires independently of the mouse cycle.
+# Supported keys: F15, SPACE, SHIFT, UP, DOWN, LEFT, RIGHT
+# F15 is the cleanest choice — it's a real key that does nothing visible in any app.
 keyboard.jiggle.enabled=false
 keyboard.jiggle.min.seconds=60
 keyboard.jiggle.max.seconds=90
+jiggle.keys=F15,SHIFT,UP,DOWN
+
+# Human-pattern simulation: varies move interval ±20%, step size 50-150%, adds
+# micro-jitter (±2px), and occasionally skips a tick (10% chance) to mimic
+# natural mouse behaviour. Recommended with profile=stealth or keep-awake.
+human.pattern=false
+
+# Prevent display/system sleep using a platform wake lock.
+# macOS: holds an IOPMAssertion (same as `caffeinate -d`).
+# Windows: calls SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED).
+prevent.sleep=false
 
 # If true, autopilot moves only after no user mouse activity is detected.
 idle.only=false

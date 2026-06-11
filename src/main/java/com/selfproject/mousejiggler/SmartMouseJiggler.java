@@ -22,6 +22,7 @@ public final class SmartMouseJiggler {
     private final RandomGenerator randomGenerator;
     private ScheduledExecutorService executor;
     private TrayController trayController;
+    private WakeLock wakeLock;
     private volatile boolean paused;
     private volatile String lastStatus = "Starting";
     private int xDirection = 1;
@@ -33,7 +34,7 @@ public final class SmartMouseJiggler {
         this.schedule = new Schedule(config);
         this.activityTracker = new ActivityTracker();
         this.keyboardNudge = new KeyboardNudge(keyPresser);
-        this.keyboardJiggle = new KeyboardJiggle(keyPresser);
+        this.keyboardJiggle = new KeyboardJiggle(keyPresser, KeyboardJiggle.parseKeyPool(config.jiggleKeys()));
         this.randomGenerator = RandomGenerator.getDefault();
     }
 
@@ -72,10 +73,16 @@ public final class SmartMouseJiggler {
         String jiggleStatus = config.keyboardJiggleEnabled()
                 ? "on (" + config.keyboardJiggleMinSeconds() + "-" + config.keyboardJiggleMaxSeconds() + "s random)"
                 : "off";
-        System.out.printf("Desktop Autopilot started. Profile=%s, input=%s, mouse=%s, keyboard=%s, keyboard-jiggle=%s, interval=%ds. Press Ctrl+C to stop.%n",
+        System.out.printf(
+                "Desktop Autopilot started. Profile=%s, input=%s, mouse=%s, keyboard=%s," +
+                " keyboard-jiggle=%s, human-pattern=%s, prevent-sleep=%s, interval=%ds.%n" +
+                "Press Ctrl+C to stop.%n",
                 config.profile(), config.inputMode().name().toLowerCase(),
                 config.mouseEnabled() ? config.mode() : "off",
-                keyboardStatus, jiggleStatus, config.interval().toSeconds());
+                keyboardStatus, jiggleStatus,
+                config.humanPattern() ? "on" : "off",
+                config.preventSleep() ? "on" : "off",
+                config.interval().toSeconds());
     }
 
     void start() {
@@ -86,12 +93,46 @@ public final class SmartMouseJiggler {
         });
 
         trayController = TrayController.install(this, config);
+        wakeLock = WakeLockFactory.create(config.preventSleep());
+        wakeLock.acquire();
+
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "mouse-jiggler-shutdown"));
-        executor.scheduleWithFixedDelay(this::jiggleSafely, 0, config.interval().toSeconds(), TimeUnit.SECONDS);
+
+        if (config.humanPattern()) {
+            // Variable interval: self-reschedule after each tick
+            scheduleNextMouseTick(0);
+        } else {
+            executor.scheduleWithFixedDelay(this::jiggleSafely, 0, config.interval().toSeconds(), TimeUnit.SECONDS);
+        }
+
         if (config.keyboardJiggleEnabled()) {
             scheduleNextKeyboardJiggle();
         }
     }
+
+    // ── Human-pattern mouse scheduling ──────────────────────────────────────
+
+    private void scheduleNextMouseTick(long firstDelayMs) {
+        long delayMs;
+        if (firstDelayMs == 0) {
+            delayMs = 0; // fire immediately on first run
+        } else {
+            long baseMs = config.interval().toMillis();
+            long variationMs = baseMs / 5; // ±20% of base interval
+            delayMs = baseMs - variationMs + randomGenerator.nextLong(variationMs * 2 + 1);
+        }
+        executor.schedule(this::humanJiggleSafely, Math.max(0, delayMs), TimeUnit.MILLISECONDS);
+    }
+
+    private void humanJiggleSafely() {
+        try {
+            jiggleSafely();
+        } finally {
+            scheduleNextMouseTick(config.interval().toMillis());
+        }
+    }
+
+    // ── Core jiggle tick ────────────────────────────────────────────────────
 
     void jiggleSafely() {
         try {
@@ -107,6 +148,12 @@ public final class SmartMouseJiggler {
             Point currentPoint = ScreenBounds.pointerLocation();
             if (config.idleOnly() && !activityTracker.userIsIdle(currentPoint, config.idleThreshold())) {
                 updateStatus("Waiting for idle mouse");
+                return;
+            }
+
+            // Human pattern: 10% chance to skip this tick (simulates a natural micro-pause)
+            if (config.humanPattern() && randomGenerator.nextInt(10) == 0) {
+                updateStatus("Active");
                 return;
             }
 
@@ -130,20 +177,62 @@ public final class SmartMouseJiggler {
 
     private Point moveMouse(Point currentPoint) {
         Rectangle safeBounds = ScreenBounds.safeBoundsForPointer();
+
+        // Human pattern: vary step size 50%–150% of configured pixels
+        int stepPixels = config.pixels();
+        if (config.humanPattern()) {
+            stepPixels = Math.max(1, (int) (stepPixels * (0.5 + randomGenerator.nextDouble())));
+        }
+
         MovementPlan plan = SafeMouseMovement.next(
-                currentPoint,
-                safeBounds,
-                config.pixels(),
-                config.mode(),
-                xDirection,
-                yDirection,
-                randomGenerator
+                currentPoint, safeBounds, stepPixels, config.mode(), xDirection, yDirection, randomGenerator
         );
         xDirection = plan.nextXDirection();
         yDirection = plan.nextYDirection();
-        mouseMover.move(plan.nextPoint());
-        return plan.nextPoint();
+
+        Point target = plan.nextPoint();
+
+        // Human pattern: micro-jitter ±2px on final target
+        if (config.humanPattern() && safeBounds != null && !safeBounds.isEmpty()) {
+            int jx = randomGenerator.nextInt(5) - 2; // -2 to +2
+            int jy = randomGenerator.nextInt(5) - 2;
+            int tx = Math.max(safeBounds.x, Math.min(safeBounds.x + safeBounds.width - 1, target.x + jx));
+            int ty = Math.max(safeBounds.y, Math.min(safeBounds.y + safeBounds.height - 1, target.y + jy));
+            target = new Point(tx, ty);
+        }
+
+        mouseMover.move(target);
+        return target;
     }
+
+    // ── Keyboard jiggle scheduling ──────────────────────────────────────────
+
+    private void scheduleNextKeyboardJiggle() {
+        int min = config.keyboardJiggleMinSeconds();
+        int range = Math.max(1, config.keyboardJiggleMaxSeconds() - min + 1);
+        long delaySecs = min + randomGenerator.nextInt(range);
+        executor.schedule(this::keyboardJiggleSafely, delaySecs, TimeUnit.SECONDS);
+    }
+
+    private void keyboardJiggleSafely() {
+        try {
+            if (!paused && schedule.isActive(LocalDateTime.now())) {
+                int keyCode = keyboardJiggle.pressRandom(randomGenerator);
+                if (config.logMoves()) {
+                    String keyName = keyCode == KeyboardJiggle.VK_F15_NATIVE ? "F15"
+                            : String.format("0x%02X", keyCode);
+                    System.out.printf("[%s] keyboard jiggle key=%s%n",
+                            LocalTime.now().format(TIME_FORMAT), keyName);
+                }
+            }
+        } catch (RuntimeException exception) {
+            System.err.println("Keyboard jiggle skipped: " + exception.getMessage());
+        } finally {
+            scheduleNextKeyboardJiggle();
+        }
+    }
+
+    // ── Lifecycle ───────────────────────────────────────────────────────────
 
     boolean isPaused() {
         return paused;
@@ -158,32 +247,12 @@ public final class SmartMouseJiggler {
         return lastStatus;
     }
 
-    private void scheduleNextKeyboardJiggle() {
-        int min = config.keyboardJiggleMinSeconds();
-        int range = Math.max(1, config.keyboardJiggleMaxSeconds() - min + 1);
-        long delaySecs = min + randomGenerator.nextInt(range);
-        executor.schedule(this::keyboardJiggleSafely, delaySecs, TimeUnit.SECONDS);
-    }
-
-    private void keyboardJiggleSafely() {
-        try {
-            if (!paused && schedule.isActive(LocalDateTime.now())) {
-                int keyCode = keyboardJiggle.pressRandom(randomGenerator);
-                if (config.logMoves()) {
-                    System.out.printf("[%s] keyboard jiggle key=0x%02X%n",
-                            LocalTime.now().format(TIME_FORMAT), keyCode);
-                }
-            }
-        } catch (RuntimeException exception) {
-            System.err.println("Keyboard jiggle skipped: " + exception.getMessage());
-        } finally {
-            scheduleNextKeyboardJiggle();
-        }
-    }
-
     void stop() {
         if (executor != null) {
             shutdown(executor);
+        }
+        if (wakeLock != null) {
+            wakeLock.release();
         }
     }
 

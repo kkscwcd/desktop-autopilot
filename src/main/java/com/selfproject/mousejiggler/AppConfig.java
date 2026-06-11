@@ -29,7 +29,10 @@ record AppConfig(
         InputMode inputMode,
         boolean keyboardJiggleEnabled,
         int keyboardJiggleMinSeconds,
-        int keyboardJiggleMaxSeconds
+        int keyboardJiggleMaxSeconds,
+        boolean humanPattern,
+        boolean preventSleep,
+        String jiggleKeys
 ) {
     private static final Path DEFAULT_CONFIG_PATH = Path.of("desktop-autopilot.properties");
 
@@ -59,19 +62,19 @@ record AppConfig(
             case MINIMAL -> new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                     false, Duration.ofSeconds(60), false, LocalTime.of(9, 0), LocalTime.of(18, 0),
                     true, true, true, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO,
-                    false, 60, 90);
+                    false, 60, 90, false, false, "F15,SHIFT,UP,DOWN");
             case KEEP_AWAKE -> new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.DIAGONAL,
                     false, Duration.ofSeconds(60), true, LocalTime.of(9, 0), LocalTime.of(18, 0),
                     true, true, true, true, false, KeyboardMode.ALTERNATE, profile, InputMode.AUTO,
-                    false, 60, 90);
+                    false, 60, 90, true, true, "F15,SHIFT,UP,DOWN");
             case STEALTH -> new AppConfig(true, Duration.ofSeconds(12), 2, MovementMode.RANDOM,
                     true, Duration.ofSeconds(45), true, LocalTime.of(9, 0), LocalTime.of(18, 0),
                     true, true, false, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO,
-                    false, 60, 90);
+                    false, 60, 90, true, true, "F15,SHIFT,UP,DOWN");
             case PRESENTATION -> new AppConfig(false, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                     false, Duration.ofSeconds(60), false, LocalTime.of(9, 0), LocalTime.of(18, 0),
                     true, true, true, false, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO,
-                    false, 60, 90);
+                    false, 60, 90, false, false, "F15,SHIFT,UP,DOWN");
         };
     }
 
@@ -96,7 +99,10 @@ record AppConfig(
                 InputMode.parse(properties.getProperty("input.mode")),
                 bool(properties, "keyboard.jiggle.enabled"),
                 positiveInt(properties, "keyboard.jiggle.min.seconds"),
-                positiveInt(properties, "keyboard.jiggle.max.seconds")
+                positiveInt(properties, "keyboard.jiggle.max.seconds"),
+                bool(properties, "human.pattern"),
+                bool(properties, "prevent.sleep"),
+                properties.getProperty("jiggle.keys")
         );
     }
 
@@ -122,6 +128,9 @@ record AppConfig(
         properties.setProperty("keyboard.jiggle.enabled", Boolean.toString(keyboardJiggleEnabled));
         properties.setProperty("keyboard.jiggle.min.seconds", Integer.toString(keyboardJiggleMinSeconds));
         properties.setProperty("keyboard.jiggle.max.seconds", Integer.toString(keyboardJiggleMaxSeconds));
+        properties.setProperty("human.pattern", Boolean.toString(humanPattern));
+        properties.setProperty("prevent.sleep", Boolean.toString(preventSleep));
+        properties.setProperty("jiggle.keys", jiggleKeys != null ? jiggleKeys : "F15,SHIFT,UP,DOWN");
         return properties;
     }
 
@@ -164,6 +173,10 @@ record AppConfig(
                 case "--keyboard-jiggle" -> properties.setProperty("keyboard.jiggle.enabled", "true");
                 case "--jiggle-min" -> properties.setProperty("keyboard.jiggle.min.seconds", value(args, ++index, arg));
                 case "--jiggle-max" -> properties.setProperty("keyboard.jiggle.max.seconds", value(args, ++index, arg));
+                case "--jiggle-keys" -> properties.setProperty("jiggle.keys", value(args, ++index, arg));
+                case "--human-pattern" -> properties.setProperty("human.pattern", "true");
+                case "--prevent-sleep" -> properties.setProperty("prevent.sleep", "true");
+                case "--no-prevent-sleep" -> properties.setProperty("prevent.sleep", "false");
                 default -> throw new IllegalArgumentException("Unknown option: " + arg);
             }
         }
@@ -199,7 +212,9 @@ record AppConfig(
                   --schedule --start HH:mm --end HH:mm --weekdays-only|--all-days
                   --keyboard --keyboard-mode horizontal|vertical|alternate --no-mouse
                   --input-mode auto|robot|native
-                  --keyboard-jiggle [--jiggle-min seconds] [--jiggle-max seconds]
+                  --keyboard-jiggle [--jiggle-min seconds] [--jiggle-max seconds] [--jiggle-keys F15,SHIFT,UP,DOWN]
+                  --human-pattern
+                  --prevent-sleep | --no-prevent-sleep
                   --no-tray --quiet --disabled
                   --config path/to/desktop-autopilot.properties
                 """);

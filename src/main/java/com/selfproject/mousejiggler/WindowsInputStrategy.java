@@ -65,14 +65,15 @@ final class WindowsInputStrategy implements InputStrategy {
 
     @Override
     public void pressKey(int javaKeyCode) {
-        // Java VK codes for arrow keys match Windows Virtual-Key codes exactly
-        sendKey((short) javaKeyCode, 0);
+        // F15 sentinel → Windows VK_F15 (0x7E); all other codes are direct Java VK = Win32 VK
+        short wVk = (javaKeyCode == KeyboardJiggle.VK_F15_NATIVE) ? (short) 0x7E : (short) javaKeyCode;
+        sendKey(wVk, 0);
         try {
             Thread.sleep(25);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        sendKey((short) javaKeyCode, WinUser.KEYBDINPUT.KEYEVENTF_KEYUP);
+        sendKey(wVk, WinUser.KEYBDINPUT.KEYEVENTF_KEYUP);
     }
 
     private void sendKey(short vk, int flags) {

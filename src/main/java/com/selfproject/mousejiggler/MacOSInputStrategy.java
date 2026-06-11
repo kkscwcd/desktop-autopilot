@@ -5,7 +5,6 @@ import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 import com.sun.jna.Structure;
 
-import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.event.KeyEvent;
 
@@ -25,11 +24,21 @@ final class MacOSInputStrategy implements InputStrategy {
     // CGMouseButton
     private static final int kCGMouseButtonLeft = 0;
 
+    // CGEventSourceStateID — HIDSystemState makes events appear hardware-generated
+    private static final int kCGEventSourceStateHIDSystemState = 1;
+
     interface CoreGraphics extends Library {
         CoreGraphics INSTANCE = Native.load("CoreGraphics", CoreGraphics.class);
 
+        // source=null for mouse works; keyboard needs a real source (see pressKey)
         Pointer CGEventCreateMouseEvent(Pointer source, int mouseType, CGPoint.ByValue position, int mouseButton);
-        Pointer CGEventCreateKeyboardEvent(Pointer source, short virtualKey, boolean keyDown);
+
+        // keyDown is C bool (1 byte) — use byte, not boolean, to avoid JNA's 4-byte int marshalling
+        Pointer CGEventCreateKeyboardEvent(Pointer source, short virtualKey, byte keyDown);
+
+        // Creates a source associated with the given event state (HID, session, etc.)
+        Pointer CGEventSourceCreate(int stateID);
+
         void CGEventPost(int tap, Pointer event);
         void CFRelease(Pointer cf);
     }
@@ -83,23 +92,32 @@ final class MacOSInputStrategy implements InputStrategy {
     @Override
     public void pressKey(int javaKeyCode) {
         short cgKey = toCGKeyCode(javaKeyCode);
-        Pointer press = CoreGraphics.INSTANCE.CGEventCreateKeyboardEvent(null, cgKey, true);
-        Pointer release = CoreGraphics.INSTANCE.CGEventCreateKeyboardEvent(null, cgKey, false);
+
+        // A null source is unreliable for keyboard events on macOS 12+.
+        // Creating a source tied to kCGEventSourceStateHIDSystemState makes the
+        // events appear as if they originated from the HID driver.
+        Pointer source = CoreGraphics.INSTANCE.CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
         try {
-            if (press != null) {
-                CoreGraphics.INSTANCE.CGEventPost(kCGHIDEventTap, press);
-            }
+            Pointer press   = CoreGraphics.INSTANCE.CGEventCreateKeyboardEvent(source, cgKey, (byte) 1);
+            Pointer release = CoreGraphics.INSTANCE.CGEventCreateKeyboardEvent(source, cgKey, (byte) 0);
             try {
-                Thread.sleep(25);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            if (release != null) {
-                CoreGraphics.INSTANCE.CGEventPost(kCGHIDEventTap, release);
+                if (press != null) {
+                    CoreGraphics.INSTANCE.CGEventPost(kCGHIDEventTap, press);
+                }
+                try {
+                    Thread.sleep(25);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                if (release != null) {
+                    CoreGraphics.INSTANCE.CGEventPost(kCGHIDEventTap, release);
+                }
+            } finally {
+                if (press != null)   CoreGraphics.INSTANCE.CFRelease(press);
+                if (release != null) CoreGraphics.INSTANCE.CFRelease(release);
             }
         } finally {
-            if (press != null) CoreGraphics.INSTANCE.CFRelease(press);
-            if (release != null) CoreGraphics.INSTANCE.CFRelease(release);
+            if (source != null) CoreGraphics.INSTANCE.CFRelease(source);
         }
     }
 }

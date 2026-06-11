@@ -41,6 +41,7 @@ https://github.com/kkscwcd/desktop-autopilot.git
 - Optional idle-only mode based on mouse movement
 - Optional working-hours schedule with weekday filtering
 - Optional keyboard arrow-key nudging for the focused app
+- Optional hardware keyboard jiggle: random key (Space, Up, Down, Shift) on a random 60–90 s interval, independent of the mouse cycle
 
 ## Important Defaults
 
@@ -108,6 +109,10 @@ mvn exec:java -Dexec.args="--keyboard --keyboard-mode horizontal --no-mouse"
 mvn exec:java -Dexec.args="--input-mode native"
 java -jar target/mouse-jiggler-1.0.0.jar --input-mode native
 java -jar target/mouse-jiggler-1.0.0.jar --input-mode robot   # force software fallback
+
+# Hardware keyboard jiggle (Space / Up / Down / Shift, random 60-90 s interval)
+java -jar target/mouse-jiggler-1.0.0.jar --keyboard-jiggle
+java -jar target/mouse-jiggler-1.0.0.jar --keyboard-jiggle --jiggle-min 60 --jiggle-max 90
 ```
 
 ## Key Classes
@@ -123,6 +128,7 @@ java -jar target/mouse-jiggler-1.0.0.jar --input-mode robot   # force software f
 - `MovementMode`: mouse movement modes
 - `KeyboardMode`: arrow-key modes
 - `Profile`: profile defaults
+- `KeyboardJiggle`: presses a random key from `[Space, Up, Down, Shift]`; returns the key code pressed
 - `InputMode`: enum — `AUTO`, `ROBOT`, `NATIVE`
 - `InputStrategy`: interface — `moveMouse(Point)`, `pressKey(int javaKeyCode)`, `close()`
 - `RobotInputStrategy`: `java.awt.Robot` implementation (cross-platform fallback)

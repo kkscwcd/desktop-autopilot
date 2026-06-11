@@ -16,6 +16,12 @@ mouse.enabled=true
 keyboard.enabled=false
 keyboard.mode=horizontal
 
+# Hardware keyboard jiggle: presses a random key (Space, Up, Down, Shift) at a
+# random interval between min and max seconds. Fires independently of the mouse cycle.
+keyboard.jiggle.enabled=false
+keyboard.jiggle.min.seconds=60
+keyboard.jiggle.max.seconds=90
+
 # If true, autopilot moves only after no user mouse activity is detected.
 idle.only=false
 idle.seconds=60

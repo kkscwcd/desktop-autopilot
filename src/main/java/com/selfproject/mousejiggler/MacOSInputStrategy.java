@@ -50,6 +50,8 @@ final class MacOSInputStrategy implements InputStrategy {
     // Map java.awt.event.KeyEvent VK codes → macOS CGKeyCode (HIToolbox/Events.h)
     private static short toCGKeyCode(int vk) {
         return switch (vk) {
+            case KeyEvent.VK_SPACE -> 49;
+            case KeyEvent.VK_SHIFT -> 56;
             case KeyEvent.VK_LEFT  -> 123;
             case KeyEvent.VK_RIGHT -> 124;
             case KeyEvent.VK_DOWN  -> 125;

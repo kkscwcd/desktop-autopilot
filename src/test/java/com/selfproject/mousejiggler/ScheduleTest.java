@@ -37,6 +37,7 @@ final class ScheduleTest {
     private static AppConfig config(boolean scheduleEnabled, LocalTime start, LocalTime end, boolean weekdaysOnly) {
         return new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                 false, Duration.ofSeconds(60), scheduleEnabled, start, end, weekdaysOnly,
-                false, true, true, false, KeyboardMode.HORIZONTAL, Profile.MINIMAL, InputMode.AUTO);
+                false, true, true, false, KeyboardMode.HORIZONTAL, Profile.MINIMAL, InputMode.AUTO,
+                false, 60, 90);
     }
 }

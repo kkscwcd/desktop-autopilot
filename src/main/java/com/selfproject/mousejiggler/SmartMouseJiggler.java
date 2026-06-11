@@ -18,6 +18,7 @@ public final class SmartMouseJiggler {
     private final Schedule schedule;
     private final ActivityTracker activityTracker;
     private final KeyboardNudge keyboardNudge;
+    private final KeyboardJiggle keyboardJiggle;
     private final RandomGenerator randomGenerator;
     private ScheduledExecutorService executor;
     private TrayController trayController;
@@ -32,6 +33,7 @@ public final class SmartMouseJiggler {
         this.schedule = new Schedule(config);
         this.activityTracker = new ActivityTracker();
         this.keyboardNudge = new KeyboardNudge(keyPresser);
+        this.keyboardJiggle = new KeyboardJiggle(keyPresser);
         this.randomGenerator = RandomGenerator.getDefault();
     }
 
@@ -79,6 +81,9 @@ public final class SmartMouseJiggler {
         trayController = TrayController.install(this, config);
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "mouse-jiggler-shutdown"));
         executor.scheduleWithFixedDelay(this::jiggleSafely, 0, config.interval().toSeconds(), TimeUnit.SECONDS);
+        if (config.keyboardJiggleEnabled()) {
+            scheduleNextKeyboardJiggle();
+        }
     }
 
     void jiggleSafely() {
@@ -144,6 +149,29 @@ public final class SmartMouseJiggler {
 
     String status() {
         return lastStatus;
+    }
+
+    private void scheduleNextKeyboardJiggle() {
+        int min = config.keyboardJiggleMinSeconds();
+        int range = Math.max(1, config.keyboardJiggleMaxSeconds() - min + 1);
+        long delaySecs = min + randomGenerator.nextInt(range);
+        executor.schedule(this::keyboardJiggleSafely, delaySecs, TimeUnit.SECONDS);
+    }
+
+    private void keyboardJiggleSafely() {
+        try {
+            if (!paused && schedule.isActive(LocalDateTime.now())) {
+                int keyCode = keyboardJiggle.pressRandom(randomGenerator);
+                if (config.logMoves()) {
+                    System.out.printf("[%s] keyboard jiggle key=0x%02X%n",
+                            LocalTime.now().format(TIME_FORMAT), keyCode);
+                }
+            }
+        } catch (RuntimeException exception) {
+            System.err.println("Keyboard jiggle skipped: " + exception.getMessage());
+        } finally {
+            scheduleNextKeyboardJiggle();
+        }
     }
 
     void stop() {

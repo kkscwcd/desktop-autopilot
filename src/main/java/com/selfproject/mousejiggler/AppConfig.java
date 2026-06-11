@@ -26,7 +26,10 @@ record AppConfig(
         boolean keyboardEnabled,
         KeyboardMode keyboardMode,
         Profile profile,
-        InputMode inputMode
+        InputMode inputMode,
+        boolean keyboardJiggleEnabled,
+        int keyboardJiggleMinSeconds,
+        int keyboardJiggleMaxSeconds
 ) {
     private static final Path DEFAULT_CONFIG_PATH = Path.of("desktop-autopilot.properties");
 
@@ -55,16 +58,20 @@ record AppConfig(
         return switch (profile) {
             case MINIMAL -> new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                     false, Duration.ofSeconds(60), false, LocalTime.of(9, 0), LocalTime.of(18, 0),
-                    true, true, true, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO);
+                    true, true, true, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO,
+                    false, 60, 90);
             case KEEP_AWAKE -> new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.DIAGONAL,
                     false, Duration.ofSeconds(60), true, LocalTime.of(9, 0), LocalTime.of(18, 0),
-                    true, true, true, true, false, KeyboardMode.ALTERNATE, profile, InputMode.AUTO);
+                    true, true, true, true, false, KeyboardMode.ALTERNATE, profile, InputMode.AUTO,
+                    false, 60, 90);
             case STEALTH -> new AppConfig(true, Duration.ofSeconds(12), 2, MovementMode.RANDOM,
                     true, Duration.ofSeconds(45), true, LocalTime.of(9, 0), LocalTime.of(18, 0),
-                    true, true, false, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO);
+                    true, true, false, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO,
+                    false, 60, 90);
             case PRESENTATION -> new AppConfig(false, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                     false, Duration.ofSeconds(60), false, LocalTime.of(9, 0), LocalTime.of(18, 0),
-                    true, true, true, false, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO);
+                    true, true, true, false, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO,
+                    false, 60, 90);
         };
     }
 
@@ -86,7 +93,10 @@ record AppConfig(
                 bool(properties, "keyboard.enabled"),
                 KeyboardMode.parse(properties.getProperty("keyboard.mode")),
                 profile,
-                InputMode.parse(properties.getProperty("input.mode"))
+                InputMode.parse(properties.getProperty("input.mode")),
+                bool(properties, "keyboard.jiggle.enabled"),
+                positiveInt(properties, "keyboard.jiggle.min.seconds"),
+                positiveInt(properties, "keyboard.jiggle.max.seconds")
         );
     }
 
@@ -109,6 +119,9 @@ record AppConfig(
         properties.setProperty("keyboard.mode", keyboardMode.name().toLowerCase(Locale.ROOT));
         properties.setProperty("profile", profile.name().toLowerCase(Locale.ROOT));
         properties.setProperty("input.mode", inputMode.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("keyboard.jiggle.enabled", Boolean.toString(keyboardJiggleEnabled));
+        properties.setProperty("keyboard.jiggle.min.seconds", Integer.toString(keyboardJiggleMinSeconds));
+        properties.setProperty("keyboard.jiggle.max.seconds", Integer.toString(keyboardJiggleMaxSeconds));
         return properties;
     }
 
@@ -148,6 +161,9 @@ record AppConfig(
                 case "--keyboard" -> properties.setProperty("keyboard.enabled", "true");
                 case "--keyboard-mode" -> properties.setProperty("keyboard.mode", value(args, ++index, arg));
                 case "--input-mode" -> properties.setProperty("input.mode", value(args, ++index, arg));
+                case "--keyboard-jiggle" -> properties.setProperty("keyboard.jiggle.enabled", "true");
+                case "--jiggle-min" -> properties.setProperty("keyboard.jiggle.min.seconds", value(args, ++index, arg));
+                case "--jiggle-max" -> properties.setProperty("keyboard.jiggle.max.seconds", value(args, ++index, arg));
                 default -> throw new IllegalArgumentException("Unknown option: " + arg);
             }
         }
@@ -183,6 +199,7 @@ record AppConfig(
                   --schedule --start HH:mm --end HH:mm --weekdays-only|--all-days
                   --keyboard --keyboard-mode horizontal|vertical|alternate --no-mouse
                   --input-mode auto|robot|native
+                  --keyboard-jiggle [--jiggle-min seconds] [--jiggle-max seconds]
                   --no-tray --quiet --disabled
                   --config path/to/desktop-autopilot.properties
                 """);

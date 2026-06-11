@@ -65,10 +65,17 @@ public final class SmartMouseJiggler {
         Runtime.getRuntime().addShutdownHook(new Thread(finalStrategy::close, "input-strategy-close"));
 
         jiggler.start();
-        System.out.printf("Desktop Autopilot started. Profile=%s, input=%s, mouse=%s, keyboard=%s, interval=%ds. Press Ctrl+C to stop.%n",
+
+        String keyboardStatus = config.keyboardEnabled()
+                ? config.keyboardMode().name().toLowerCase()
+                : "off";
+        String jiggleStatus = config.keyboardJiggleEnabled()
+                ? "on (" + config.keyboardJiggleMinSeconds() + "-" + config.keyboardJiggleMaxSeconds() + "s random)"
+                : "off";
+        System.out.printf("Desktop Autopilot started. Profile=%s, input=%s, mouse=%s, keyboard=%s, keyboard-jiggle=%s, interval=%ds. Press Ctrl+C to stop.%n",
                 config.profile(), config.inputMode().name().toLowerCase(),
                 config.mouseEnabled() ? config.mode() : "off",
-                config.keyboardEnabled() ? config.keyboardMode() : "off", config.interval().toSeconds());
+                keyboardStatus, jiggleStatus, config.interval().toSeconds());
     }
 
     void start() {

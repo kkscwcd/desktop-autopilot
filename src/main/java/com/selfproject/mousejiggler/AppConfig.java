@@ -25,7 +25,8 @@ record AppConfig(
         boolean mouseEnabled,
         boolean keyboardEnabled,
         KeyboardMode keyboardMode,
-        Profile profile
+        Profile profile,
+        InputMode inputMode
 ) {
     private static final Path DEFAULT_CONFIG_PATH = Path.of("desktop-autopilot.properties");
 
@@ -54,16 +55,16 @@ record AppConfig(
         return switch (profile) {
             case MINIMAL -> new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                     false, Duration.ofSeconds(60), false, LocalTime.of(9, 0), LocalTime.of(18, 0),
-                    true, true, true, true, false, KeyboardMode.HORIZONTAL, profile);
+                    true, true, true, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO);
             case KEEP_AWAKE -> new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.DIAGONAL,
                     false, Duration.ofSeconds(60), true, LocalTime.of(9, 0), LocalTime.of(18, 0),
-                    true, true, true, true, false, KeyboardMode.ALTERNATE, profile);
+                    true, true, true, true, false, KeyboardMode.ALTERNATE, profile, InputMode.AUTO);
             case STEALTH -> new AppConfig(true, Duration.ofSeconds(12), 2, MovementMode.RANDOM,
                     true, Duration.ofSeconds(45), true, LocalTime.of(9, 0), LocalTime.of(18, 0),
-                    true, true, false, true, false, KeyboardMode.HORIZONTAL, profile);
+                    true, true, false, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO);
             case PRESENTATION -> new AppConfig(false, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                     false, Duration.ofSeconds(60), false, LocalTime.of(9, 0), LocalTime.of(18, 0),
-                    true, true, true, false, false, KeyboardMode.HORIZONTAL, profile);
+                    true, true, true, false, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO);
         };
     }
 
@@ -84,7 +85,8 @@ record AppConfig(
                 bool(properties, "mouse.enabled"),
                 bool(properties, "keyboard.enabled"),
                 KeyboardMode.parse(properties.getProperty("keyboard.mode")),
-                profile
+                profile,
+                InputMode.parse(properties.getProperty("input.mode"))
         );
     }
 
@@ -106,6 +108,7 @@ record AppConfig(
         properties.setProperty("keyboard.enabled", Boolean.toString(keyboardEnabled));
         properties.setProperty("keyboard.mode", keyboardMode.name().toLowerCase(Locale.ROOT));
         properties.setProperty("profile", profile.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("input.mode", inputMode.name().toLowerCase(Locale.ROOT));
         return properties;
     }
 
@@ -144,6 +147,7 @@ record AppConfig(
                 case "--no-mouse" -> properties.setProperty("mouse.enabled", "false");
                 case "--keyboard" -> properties.setProperty("keyboard.enabled", "true");
                 case "--keyboard-mode" -> properties.setProperty("keyboard.mode", value(args, ++index, arg));
+                case "--input-mode" -> properties.setProperty("input.mode", value(args, ++index, arg));
                 default -> throw new IllegalArgumentException("Unknown option: " + arg);
             }
         }
@@ -178,6 +182,7 @@ record AppConfig(
                   --idle-only --idle-seconds seconds
                   --schedule --start HH:mm --end HH:mm --weekdays-only|--all-days
                   --keyboard --keyboard-mode horizontal|vertical|alternate --no-mouse
+                  --input-mode auto|robot|native
                   --no-tray --quiet --disabled
                   --config path/to/desktop-autopilot.properties
                 """);

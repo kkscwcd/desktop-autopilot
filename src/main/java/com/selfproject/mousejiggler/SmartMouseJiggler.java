@@ -1,9 +1,7 @@
 package com.selfproject.mousejiggler;
 
-import java.awt.AWTException;
 import java.awt.Point;
 import java.awt.Rectangle;
-import java.awt.Robot;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -47,27 +45,27 @@ public final class SmartMouseJiggler {
             return;
         }
 
-        Robot robot;
+        InputStrategy strategy;
         try {
-            robot = new Robot();
-        } catch (AWTException | SecurityException exception) {
-            System.err.println("Unable to control the mouse. Allow Java accessibility/input control and run again.");
-            System.err.println(exception.getMessage());
+            strategy = InputStrategyFactory.create(config.inputMode());
+        } catch (Exception | UnsatisfiedLinkError exception) {
+            System.err.println("Unable to initialise input strategy: " + exception.getMessage());
+            System.err.println("Grant Accessibility permission to the JVM and run again.");
             return;
         }
 
         SmartMouseJiggler jiggler = new SmartMouseJiggler(
-                point -> robot.mouseMove(point.x, point.y),
-                keyCode -> {
-                    robot.keyPress(keyCode);
-                    robot.delay(25);
-                    robot.keyRelease(keyCode);
-                },
+                strategy::moveMouse,
+                strategy::pressKey,
                 config
         );
+        final InputStrategy finalStrategy = strategy;
+        Runtime.getRuntime().addShutdownHook(new Thread(finalStrategy::close, "input-strategy-close"));
+
         jiggler.start();
-        System.out.printf("Desktop Autopilot started. Profile=%s, mouse=%s, keyboard=%s, interval=%ds. Press Ctrl+C to stop.%n",
-                config.profile(), config.mouseEnabled() ? config.mode() : "off",
+        System.out.printf("Desktop Autopilot started. Profile=%s, input=%s, mouse=%s, keyboard=%s, interval=%ds. Press Ctrl+C to stop.%n",
+                config.profile(), config.inputMode().name().toLowerCase(),
+                config.mouseEnabled() ? config.mode() : "off",
                 config.keyboardEnabled() ? config.keyboardMode() : "off", config.interval().toSeconds());
     }
 

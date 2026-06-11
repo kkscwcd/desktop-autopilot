@@ -1,6 +1,11 @@
 # Desktop Autopilot configuration
 profile=minimal
 enabled=true
+
+# Input strategy: auto (try native first, fall back to Robot), robot, or native
+# native = CGEventPost on macOS / SendInput on Windows — events look hardware-level
+# robot  = java.awt.Robot — software-tagged, simpler but detectable by some tools
+input.mode=auto
 interval.seconds=6
 pixels=2
 mode=horizontal

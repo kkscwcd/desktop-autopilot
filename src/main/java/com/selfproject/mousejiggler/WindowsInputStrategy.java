@@ -13,13 +13,15 @@ import java.awt.Point;
  */
 final class WindowsInputStrategy implements InputStrategy {
 
-    private static final int SM_XVIRTUALSCREEN = 76;
-    private static final int SM_YVIRTUALSCREEN = 77;
-    private static final int SM_CXVIRTUALSCREEN = 78;
-    private static final int SM_CYVIRTUALSCREEN = 79;
+    private static final int SM_XVIRTUALSCREEN    = 76;
+    private static final int SM_YVIRTUALSCREEN    = 77;
+    private static final int SM_CXVIRTUALSCREEN   = 78;
+    private static final int SM_CYVIRTUALSCREEN   = 79;
 
-    private static final int MOUSEEVENTF_MOVE = 0x0001;
-    private static final int MOUSEEVENTF_ABSOLUTE = 0x8000;
+    private static final int MOUSEEVENTF_MOVE         = 0x0001;
+    private static final int MOUSEEVENTF_LEFTDOWN     = 0x0002;
+    private static final int MOUSEEVENTF_LEFTUP       = 0x0004;
+    private static final int MOUSEEVENTF_ABSOLUTE     = 0x8000;
     private static final int MOUSEEVENTF_VIRTUALDESKTOP = 0x4000;
 
     WindowsInputStrategy() {
@@ -46,21 +48,25 @@ final class WindowsInputStrategy implements InputStrategy {
         int normX = (int) (((long) (point.x - xVirtual) * 65535) / Math.max(1, wVirtual - 1));
         int normY = (int) (((long) (point.y - yVirtual) * 65535) / Math.max(1, hVirtual - 1));
 
-        WinUser.INPUT[] inputs = (WinUser.INPUT[]) new WinUser.INPUT().toArray(1);
-        WinUser.INPUT input = inputs[0];
-
-        input.type = new WinDef.DWORD(WinUser.INPUT.INPUT_MOUSE);
-        input.input.setType("mi");
+        WinUser.INPUT input = mouseInput();
         input.input.mi.dx = new WinDef.LONG(normX);
         input.input.mi.dy = new WinDef.LONG(normY);
-        input.input.mi.mouseData = new WinDef.DWORD(0);
-        input.input.mi.time = new WinDef.DWORD(0);
-        input.input.mi.dwExtraInfo = new BaseTSD.ULONG_PTR(0);
-        
-        int flags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESKTOP;
-        input.input.mi.dwFlags = new WinDef.DWORD(flags);
+        input.input.mi.dwFlags = new WinDef.DWORD(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESKTOP);
+        send(input);
+    }
 
-        User32.INSTANCE.SendInput(new WinDef.DWORD(1), inputs, input.size());
+    @Override
+    public void click(Point point) {
+        // Click at current cursor position — moveMouse was already called this cycle
+        sendMouseButton(MOUSEEVENTF_LEFTDOWN);
+        try { Thread.sleep(50); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        sendMouseButton(MOUSEEVENTF_LEFTUP);
+    }
+
+    private void sendMouseButton(int eventFlags) {
+        WinUser.INPUT input = mouseInput();
+        input.input.mi.dwFlags = new WinDef.DWORD(eventFlags);
+        send(input);
     }
 
     @Override
@@ -76,18 +82,34 @@ final class WindowsInputStrategy implements InputStrategy {
         sendKey(wVk, WinUser.KEYBDINPUT.KEYEVENTF_KEYUP);
     }
 
-    private void sendKey(short vk, int flags) {
+    private void sendKey(short vk, int keyFlags) {
         WinUser.INPUT[] inputs = (WinUser.INPUT[]) new WinUser.INPUT().toArray(1);
         WinUser.INPUT input = inputs[0];
-
         input.type = new WinDef.DWORD(WinUser.INPUT.INPUT_KEYBOARD);
         input.input.setType("ki");
         input.input.ki.wVk = new WinDef.WORD(vk);
         input.input.ki.wScan = new WinDef.WORD(0);
         input.input.ki.time = new WinDef.DWORD(0);
         input.input.ki.dwExtraInfo = new BaseTSD.ULONG_PTR(0);
-        input.input.ki.dwFlags = new WinDef.DWORD(flags);
-
+        input.input.ki.dwFlags = new WinDef.DWORD(keyFlags);
         User32.INSTANCE.SendInput(new WinDef.DWORD(1), inputs, input.size());
+    }
+
+    /** Returns a mouse INPUT struct with zeroed dx/dy/mouseData/time/dwExtraInfo, ready for flag assignment. */
+    private static WinUser.INPUT mouseInput() {
+        WinUser.INPUT[] inputs = (WinUser.INPUT[]) new WinUser.INPUT().toArray(1);
+        WinUser.INPUT input = inputs[0];
+        input.type = new WinDef.DWORD(WinUser.INPUT.INPUT_MOUSE);
+        input.input.setType("mi");
+        input.input.mi.dx = new WinDef.LONG(0);
+        input.input.mi.dy = new WinDef.LONG(0);
+        input.input.mi.mouseData = new WinDef.DWORD(0);
+        input.input.mi.time = new WinDef.DWORD(0);
+        input.input.mi.dwExtraInfo = new BaseTSD.ULONG_PTR(0);
+        return input;
+    }
+
+    private static void send(WinUser.INPUT input) {
+        User32.INSTANCE.SendInput(new WinDef.DWORD(1), (WinUser.INPUT[]) input.toArray(1), input.size());
     }
 }

@@ -19,7 +19,9 @@ final class MacOSInputStrategy implements InputStrategy {
     private static final int kCGHIDEventTap = 0;
 
     // CGEventType
-    private static final int kCGEventMouseMoved = 5;
+    private static final int kCGEventMouseMoved      = 5;
+    private static final int kCGEventLeftMouseDown   = 1;
+    private static final int kCGEventLeftMouseUp     = 2;
 
     // CGMouseButton
     private static final int kCGMouseButtonLeft = 0;
@@ -76,6 +78,23 @@ final class MacOSInputStrategy implements InputStrategy {
     }
 
     @Override
+    public void click(Point point) {
+        CGPoint.ByValue position = new CGPoint.ByValue(point.x, point.y);
+        Pointer down = CoreGraphics.INSTANCE.CGEventCreateMouseEvent(
+                null, kCGEventLeftMouseDown, position, kCGMouseButtonLeft);
+        Pointer up = CoreGraphics.INSTANCE.CGEventCreateMouseEvent(
+                null, kCGEventLeftMouseUp, position, kCGMouseButtonLeft);
+        try {
+            if (down != null) CoreGraphics.INSTANCE.CGEventPost(kCGHIDEventTap, down);
+            try { Thread.sleep(50); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            if (up != null) CoreGraphics.INSTANCE.CGEventPost(kCGHIDEventTap, up);
+        } finally {
+            if (down != null) CoreGraphics.INSTANCE.CFRelease(down);
+            if (up != null) CoreGraphics.INSTANCE.CFRelease(up);
+        }
+    }
+
+    @Override
     public void moveMouse(Point point) {
         CGPoint.ByValue position = new CGPoint.ByValue(point.x, point.y);
         Pointer event = CoreGraphics.INSTANCE.CGEventCreateMouseEvent(
@@ -104,11 +123,7 @@ final class MacOSInputStrategy implements InputStrategy {
             try {
                 if (press != null) {
                     CoreGraphics.INSTANCE.CGEventPost(kCGHIDEventTap, press);
-                }
-                try {
-                    Thread.sleep(25);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                    try { Thread.sleep(25); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                 }
                 if (release != null) {
                     CoreGraphics.INSTANCE.CGEventPost(kCGHIDEventTap, release);

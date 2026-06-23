@@ -12,8 +12,11 @@ import java.util.random.RandomGenerator;
 
 public final class SmartMouseJiggler {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final int SMOOTH_STEPS = 5;   // intermediate positions per smooth move
+    private static final int SMOOTH_STEP_MS = 12; // delay between each intermediate step
 
     private final MouseMover mouseMover;
+    private final MouseClicker mouseClicker;
     private final AppConfig config;
     private final Schedule schedule;
     private final ActivityTracker activityTracker;
@@ -28,8 +31,9 @@ public final class SmartMouseJiggler {
     private int xDirection = 1;
     private int yDirection = 1;
 
-    SmartMouseJiggler(MouseMover mouseMover, KeyPresser keyPresser, AppConfig config) {
+    SmartMouseJiggler(MouseMover mouseMover, KeyPresser keyPresser, MouseClicker mouseClicker, AppConfig config) {
         this.mouseMover = mouseMover;
+        this.mouseClicker = mouseClicker;
         this.config = config;
         this.schedule = new Schedule(config);
         this.activityTracker = new ActivityTracker();
@@ -60,6 +64,7 @@ public final class SmartMouseJiggler {
         SmartMouseJiggler jiggler = new SmartMouseJiggler(
                 strategy::moveMouse,
                 strategy::pressKey,
+                strategy::click,
                 config
         );
         final InputStrategy finalStrategy = strategy;
@@ -68,21 +73,24 @@ public final class SmartMouseJiggler {
         jiggler.start();
 
         String keyboardStatus = config.keyboardEnabled()
-                ? config.keyboardMode().name().toLowerCase()
-                : "off";
+                ? config.keyboardMode().name().toLowerCase() : "off";
         String jiggleStatus = config.keyboardJiggleEnabled()
-                ? "on (" + config.keyboardJiggleMinSeconds() + "-" + config.keyboardJiggleMaxSeconds() + "s random)"
-                : "off";
+                ? "on (" + config.keyboardJiggleMinSeconds() + "-" + config.keyboardJiggleMaxSeconds() + "s)" : "off";
+        String clickStatus = config.mouseClickEnabled()
+                ? "on (" + config.mouseClickMinSeconds() + "-" + config.mouseClickMaxSeconds() + "s)" : "off";
         System.out.printf(
-                "Desktop Autopilot started. Profile=%s, input=%s, mouse=%s, keyboard=%s," +
-                " keyboard-jiggle=%s, human-pattern=%s, prevent-sleep=%s, interval=%ds.%n" +
+                "Desktop Autopilot started.%n" +
+                "  Profile=%s  input=%s  interval=%ds%n" +
+                "  mouse=%s  smooth=%s  click=%s%n" +
+                "  keyboard=%s  jiggle=%s%n" +
+                "  human-pattern=%s  prevent-sleep=%s%n" +
                 "Press Ctrl+C to stop.%n",
-                config.profile(), config.inputMode().name().toLowerCase(),
+                config.profile(), config.inputMode().name().toLowerCase(), config.interval().toSeconds(),
                 config.mouseEnabled() ? config.mode() : "off",
+                config.mouseSmooth() ? "on" : "off", clickStatus,
                 keyboardStatus, jiggleStatus,
                 config.humanPattern() ? "on" : "off",
-                config.preventSleep() ? "on" : "off",
-                config.interval().toSeconds());
+                config.preventSleep() ? "on" : "off");
     }
 
     void start() {
@@ -99,14 +107,15 @@ public final class SmartMouseJiggler {
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "mouse-jiggler-shutdown"));
 
         if (config.humanPattern()) {
-            // Variable interval: self-reschedule after each tick
             scheduleNextMouseTick(0);
         } else {
             executor.scheduleWithFixedDelay(this::jiggleSafely, 0, config.interval().toSeconds(), TimeUnit.SECONDS);
         }
-
         if (config.keyboardJiggleEnabled()) {
             scheduleNextKeyboardJiggle();
+        }
+        if (config.mouseClickEnabled()) {
+            scheduleNextMouseClick();
         }
     }
 
@@ -115,10 +124,10 @@ public final class SmartMouseJiggler {
     private void scheduleNextMouseTick(long firstDelayMs) {
         long delayMs;
         if (firstDelayMs == 0) {
-            delayMs = 0; // fire immediately on first run
+            delayMs = 0;
         } else {
             long baseMs = config.interval().toMillis();
-            long variationMs = baseMs / 5; // ±20% of base interval
+            long variationMs = baseMs / 5;
             delayMs = baseMs - variationMs + randomGenerator.nextLong(variationMs * 2 + 1);
         }
         executor.schedule(this::humanJiggleSafely, Math.max(0, delayMs), TimeUnit.MILLISECONDS);
@@ -136,14 +145,8 @@ public final class SmartMouseJiggler {
 
     void jiggleSafely() {
         try {
-            if (paused) {
-                updateStatus("Paused");
-                return;
-            }
-            if (!schedule.isActive(LocalDateTime.now())) {
-                updateStatus("Outside configured schedule");
-                return;
-            }
+            if (paused) { updateStatus("Paused"); return; }
+            if (!schedule.isActive(LocalDateTime.now())) { updateStatus("Outside configured schedule"); return; }
 
             Point currentPoint = ScreenBounds.pointerLocation();
             if (config.idleOnly() && !activityTracker.userIsIdle(currentPoint, config.idleThreshold())) {
@@ -151,7 +154,7 @@ public final class SmartMouseJiggler {
                 return;
             }
 
-            // Human pattern: 10% chance to skip this tick (simulates a natural micro-pause)
+            // Human pattern: 10% chance to skip a tick (natural micro-pause)
             if (config.humanPattern() && randomGenerator.nextInt(10) == 0) {
                 updateStatus("Active");
                 return;
@@ -194,15 +197,67 @@ public final class SmartMouseJiggler {
 
         // Human pattern: micro-jitter ±2px on final target
         if (config.humanPattern() && safeBounds != null && !safeBounds.isEmpty()) {
-            int jx = randomGenerator.nextInt(5) - 2; // -2 to +2
+            int jx = randomGenerator.nextInt(5) - 2;
             int jy = randomGenerator.nextInt(5) - 2;
             int tx = Math.max(safeBounds.x, Math.min(safeBounds.x + safeBounds.width - 1, target.x + jx));
             int ty = Math.max(safeBounds.y, Math.min(safeBounds.y + safeBounds.height - 1, target.y + jy));
             target = new Point(tx, ty);
         }
 
-        mouseMover.move(target);
+        if (config.mouseSmooth()) {
+            smoothMove(currentPoint, target);
+        } else {
+            mouseMover.move(target);
+        }
         return target;
+    }
+
+    /**
+     * Animates movement from {@code from} to {@code to} via {@value SMOOTH_STEPS} intermediate
+     * positions, pausing {@value SMOOTH_STEP_MS} ms between each step. This makes the cursor
+     * visibly travel across the screen rather than teleporting, which looks far more natural
+     * to any observer and to monitoring software that tracks cursor velocity.
+     */
+    private void smoothMove(Point from, Point to) {
+        for (int i = 1; i <= SMOOTH_STEPS; i++) {
+            int x = from.x + (to.x - from.x) * i / SMOOTH_STEPS;
+            int y = from.y + (to.y - from.y) * i / SMOOTH_STEPS;
+            mouseMover.move(new Point(x, y));
+            if (i < SMOOTH_STEPS) {
+                try {
+                    Thread.sleep(SMOOTH_STEP_MS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+    }
+
+    // ── Mouse click scheduling ───────────────────────────────────────────────
+
+    private void scheduleNextMouseClick() {
+        int min = config.mouseClickMinSeconds();
+        int range = Math.max(1, config.mouseClickMaxSeconds() - min + 1);
+        long delaySecs = min + randomGenerator.nextInt(range);
+        executor.schedule(this::mouseClickSafely, delaySecs, TimeUnit.SECONDS);
+    }
+
+    private void mouseClickSafely() {
+        try {
+            if (!paused && schedule.isActive(LocalDateTime.now())) {
+                Point currentPoint = ScreenBounds.pointerLocation();
+                mouseClicker.click(currentPoint);
+                if (config.logMoves()) {
+                    System.out.printf("[%s] mouse click at (%d,%d)%n",
+                            LocalTime.now().format(TIME_FORMAT), currentPoint.x, currentPoint.y);
+                }
+            }
+        } catch (RuntimeException exception) {
+            System.err.println("Mouse click skipped: " + exception.getMessage());
+        } finally {
+            scheduleNextMouseClick();
+        }
     }
 
     // ── Keyboard jiggle scheduling ──────────────────────────────────────────
@@ -234,39 +289,29 @@ public final class SmartMouseJiggler {
 
     // ── Lifecycle ───────────────────────────────────────────────────────────
 
-    boolean isPaused() {
-        return paused;
-    }
+    boolean isPaused() { return paused; }
 
     void setPaused(boolean paused) {
         this.paused = paused;
         updateStatus(paused ? "Paused" : "Active");
     }
 
-    String status() {
-        return lastStatus;
-    }
+    String status() { return lastStatus; }
 
     void stop() {
-        if (executor != null) {
-            shutdown(executor);
-        }
-        if (wakeLock != null) {
-            wakeLock.release();
-        }
+        if (executor != null) shutdown(executor);
+        if (wakeLock != null) wakeLock.release();
     }
 
     private void updateStatus(String status) {
         lastStatus = status;
-        if (trayController != null) {
-            trayController.update();
-        }
+        if (trayController != null) trayController.update();
     }
 
     private static void logActivity(Point from, Point to, boolean keyboardEnabled) {
-        String keyboardStatus = keyboardEnabled ? ", pressed balanced arrow keys" : "";
+        String kb = keyboardEnabled ? ", pressed balanced arrow keys" : "";
         System.out.printf("[%s] moved mouse from (%d,%d) to (%d,%d)%s%n",
-                LocalTime.now().format(TIME_FORMAT), from.x, from.y, to.x, to.y, keyboardStatus);
+                LocalTime.now().format(TIME_FORMAT), from.x, from.y, to.x, to.y, kb);
     }
 
     private static void shutdown(ScheduledExecutorService executor) {

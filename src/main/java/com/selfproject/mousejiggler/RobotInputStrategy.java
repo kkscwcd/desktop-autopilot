@@ -3,6 +3,7 @@ package com.selfproject.mousejiggler;
 import java.awt.AWTException;
 import java.awt.Point;
 import java.awt.Robot;
+import java.awt.event.InputEvent;
 
 final class RobotInputStrategy implements InputStrategy {
     private final Robot robot;
@@ -14,6 +15,13 @@ final class RobotInputStrategy implements InputStrategy {
     @Override
     public void moveMouse(Point point) {
         robot.mouseMove(point.x, point.y);
+    }
+
+    @Override
+    public void click(Point point) {
+        robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);
+        robot.delay(50);
+        robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
     }
 
     @Override

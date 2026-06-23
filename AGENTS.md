@@ -32,6 +32,8 @@ https://github.com/kkscwcd/desktop-autopilot.git
 - Hardware keyboard jiggle (`--keyboard-jiggle`): presses a random key from a configurable pool at a random 60–90 s interval, independent of the mouse cycle
   - Default key pool: `F15, SHIFT, UP, DOWN` — F15 is the cleanest (does nothing visible in any app)
   - Configurable via `--jiggle-keys F15,SHIFT,UP,DOWN` or `jiggle.keys=` in config
+- Smooth mouse movement (`--smooth`): cursor slides through 5 intermediate positions over ~60 ms instead of teleporting, making movement look natural to observers and velocity-tracking software
+- Mouse click (`--mouse-click`): fires a left-click at the current cursor position at a random interval (default 120–300 s), independent of the move cycle; keeps chat apps green
 
 ## Important Defaults
 
@@ -41,6 +43,8 @@ Keyboard nudge (`--keyboard`) must stay **disabled** by default — it sends key
 mouse.enabled=true
 keyboard.enabled=false
 keyboard.jiggle.enabled=false
+mouse.smooth=false
+mouse.click.enabled=false
 human.pattern=false
 prevent.sleep=false
 ```
@@ -68,7 +72,7 @@ Expected test count: **16 tests**
 
 ```sh
 # Recommended demo command — all new features active
-./run.sh --input-mode native --keyboard-jiggle --human-pattern --prevent-sleep
+./run.sh --input-mode native --keyboard-jiggle --human-pattern --prevent-sleep --smooth --mouse-click
 
 # Profiles
 ./run.sh --profile stealth          # human-pattern + prevent-sleep on by default
@@ -94,6 +98,10 @@ Expected test count: **16 tests**
 ./run.sh --input-mode native
 ./run.sh --input-mode robot         # force software fallback
 
+# Smooth movement + mouse click
+./run.sh --smooth --mouse-click
+./run.sh --smooth --mouse-click --click-min 60 --click-max 120
+
 # Human pattern + wake lock standalone
 ./run.sh --human-pattern --prevent-sleep
 ```
@@ -114,7 +122,8 @@ Expected test count: **16 tests**
 | `MovementMode` | Mouse movement mode enum |
 | `KeyboardMode` | Arrow-key mode enum |
 | `InputMode` | Enum: `AUTO`, `ROBOT`, `NATIVE` |
-| `InputStrategy` | Interface: `moveMouse(Point)`, `pressKey(int)`, `close()` |
+| `MouseClicker` | Functional interface: `click(Point)` |
+| `InputStrategy` | Interface: `moveMouse(Point)`, `pressKey(int)`, `click(Point)`, `close()` |
 | `RobotInputStrategy` | `java.awt.Robot` fallback |
 | `MacOSInputStrategy` | CoreGraphics JNA — `CGEventPost(kCGHIDEventTap, ...)` |
 | `WindowsInputStrategy` | User32 JNA — `SendInput()` with virtual desktop coords |
@@ -141,7 +150,7 @@ Expected test count: **16 tests**
 - Add or update tests when changing config parsing, scheduling, movement, idle tracking, or keyboard nudging.
 - Avoid committing `target/`, `.DS_Store`, or local config files.
 
-## AppConfig Fields (23 total)
+## AppConfig Fields (27 total)
 
 | Property | CLI flag | Default |
 |---|---|---|
@@ -168,6 +177,10 @@ Expected test count: **16 tests**
 | `human.pattern` | `--human-pattern` | `false` (true in keep-awake/stealth) |
 | `prevent.sleep` | `--prevent-sleep` / `--no-prevent-sleep` | `false` (true in keep-awake/stealth) |
 | `jiggle.keys` | `--jiggle-keys F15,SHIFT,...` | `F15,SHIFT,UP,DOWN` |
+| `mouse.smooth` | `--smooth` | `false` (true in keep-awake/stealth) |
+| `mouse.click.enabled` | `--mouse-click` | `false` |
+| `mouse.click.min.seconds` | `--click-min N` | `120` |
+| `mouse.click.max.seconds` | `--click-max N` | `300` |
 
 ## Last Known Remote State
 
@@ -183,6 +196,8 @@ Local unpushed changes (not yet pushed to remote):
 - Hardware keyboard jiggle (`KeyboardJiggle`) with configurable key pool + F15 support
 - Human-pattern simulation (variable interval, step size, micro-jitter, random skip)
 - System wake lock (`MacOSWakeLock`, `WindowsWakeLock`, `WakeLockFactory`)
+- Smooth mouse movement (5-step linear interpolation, ~60 ms travel time)
+- Mouse click scheduling (`--mouse-click`, independent random interval)
 - Fat JAR via `maven-shade-plugin` with signature stripping
 - `run.sh` terminal launcher (auto-builds if JAR missing)
 - Startup log shows all active features explicitly

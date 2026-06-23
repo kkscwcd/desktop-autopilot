@@ -32,7 +32,11 @@ record AppConfig(
         int keyboardJiggleMaxSeconds,
         boolean humanPattern,
         boolean preventSleep,
-        String jiggleKeys
+        String jiggleKeys,
+        boolean mouseSmooth,
+        boolean mouseClickEnabled,
+        int mouseClickMinSeconds,
+        int mouseClickMaxSeconds
 ) {
     private static final Path DEFAULT_CONFIG_PATH = Path.of("desktop-autopilot.properties");
 
@@ -62,19 +66,23 @@ record AppConfig(
             case MINIMAL -> new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                     false, Duration.ofSeconds(60), false, LocalTime.of(9, 0), LocalTime.of(18, 0),
                     true, true, true, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO,
-                    false, 60, 90, false, false, "F15,SHIFT,UP,DOWN");
+                    false, 60, 90, false, false, "F15,SHIFT,UP,DOWN",
+                    false, false, 120, 300);
             case KEEP_AWAKE -> new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.DIAGONAL,
                     false, Duration.ofSeconds(60), true, LocalTime.of(9, 0), LocalTime.of(18, 0),
                     true, true, true, true, false, KeyboardMode.ALTERNATE, profile, InputMode.AUTO,
-                    false, 60, 90, true, true, "F15,SHIFT,UP,DOWN");
+                    false, 60, 90, true, true, "F15,SHIFT,UP,DOWN",
+                    true, false, 120, 300);
             case STEALTH -> new AppConfig(true, Duration.ofSeconds(12), 2, MovementMode.RANDOM,
                     true, Duration.ofSeconds(45), true, LocalTime.of(9, 0), LocalTime.of(18, 0),
                     true, true, false, true, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO,
-                    false, 60, 90, true, true, "F15,SHIFT,UP,DOWN");
+                    false, 60, 90, true, true, "F15,SHIFT,UP,DOWN",
+                    true, false, 120, 300);
             case PRESENTATION -> new AppConfig(false, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                     false, Duration.ofSeconds(60), false, LocalTime.of(9, 0), LocalTime.of(18, 0),
                     true, true, true, false, false, KeyboardMode.HORIZONTAL, profile, InputMode.AUTO,
-                    false, 60, 90, false, false, "F15,SHIFT,UP,DOWN");
+                    false, 60, 90, false, false, "F15,SHIFT,UP,DOWN",
+                    false, false, 120, 300);
         };
     }
 
@@ -102,7 +110,11 @@ record AppConfig(
                 positiveInt(properties, "keyboard.jiggle.max.seconds"),
                 bool(properties, "human.pattern"),
                 bool(properties, "prevent.sleep"),
-                properties.getProperty("jiggle.keys")
+                properties.getProperty("jiggle.keys"),
+                bool(properties, "mouse.smooth"),
+                bool(properties, "mouse.click.enabled"),
+                positiveInt(properties, "mouse.click.min.seconds"),
+                positiveInt(properties, "mouse.click.max.seconds")
         );
     }
 
@@ -131,6 +143,10 @@ record AppConfig(
         properties.setProperty("human.pattern", Boolean.toString(humanPattern));
         properties.setProperty("prevent.sleep", Boolean.toString(preventSleep));
         properties.setProperty("jiggle.keys", jiggleKeys != null ? jiggleKeys : "F15,SHIFT,UP,DOWN");
+        properties.setProperty("mouse.smooth", Boolean.toString(mouseSmooth));
+        properties.setProperty("mouse.click.enabled", Boolean.toString(mouseClickEnabled));
+        properties.setProperty("mouse.click.min.seconds", Integer.toString(mouseClickMinSeconds));
+        properties.setProperty("mouse.click.max.seconds", Integer.toString(mouseClickMaxSeconds));
         return properties;
     }
 
@@ -177,6 +193,10 @@ record AppConfig(
                 case "--human-pattern" -> properties.setProperty("human.pattern", "true");
                 case "--prevent-sleep" -> properties.setProperty("prevent.sleep", "true");
                 case "--no-prevent-sleep" -> properties.setProperty("prevent.sleep", "false");
+                case "--smooth" -> properties.setProperty("mouse.smooth", "true");
+                case "--mouse-click" -> properties.setProperty("mouse.click.enabled", "true");
+                case "--click-min" -> properties.setProperty("mouse.click.min.seconds", value(args, ++index, arg));
+                case "--click-max" -> properties.setProperty("mouse.click.max.seconds", value(args, ++index, arg));
                 default -> throw new IllegalArgumentException("Unknown option: " + arg);
             }
         }
@@ -213,7 +233,8 @@ record AppConfig(
                   --keyboard --keyboard-mode horizontal|vertical|alternate --no-mouse
                   --input-mode auto|robot|native
                   --keyboard-jiggle [--jiggle-min seconds] [--jiggle-max seconds] [--jiggle-keys F15,SHIFT,UP,DOWN]
-                  --human-pattern
+                  --human-pattern --smooth
+                  --mouse-click [--click-min seconds] [--click-max seconds]
                   --prevent-sleep | --no-prevent-sleep
                   --no-tray --quiet --disabled
                   --config path/to/desktop-autopilot.properties

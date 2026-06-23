@@ -38,6 +38,7 @@ final class ScheduleTest {
         return new AppConfig(true, Duration.ofSeconds(6), 2, MovementMode.HORIZONTAL,
                 false, Duration.ofSeconds(60), scheduleEnabled, start, end, weekdaysOnly,
                 false, true, true, false, KeyboardMode.HORIZONTAL, Profile.MINIMAL, InputMode.AUTO,
-                false, 60, 90, false, false, "F15,SHIFT,UP,DOWN");
+                false, 60, 90, false, false, "F15,SHIFT,UP,DOWN",
+                false, false, 120, 300);
     }
 }

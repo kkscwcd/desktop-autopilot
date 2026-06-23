@@ -25,6 +25,17 @@ keyboard.jiggle.min.seconds=60
 keyboard.jiggle.max.seconds=90
 jiggle.keys=F15,SHIFT,UP,DOWN
 
+# Smooth mouse movement: instead of teleporting, the cursor slides through 5
+# intermediate positions over ~60 ms, making movement look natural on screen
+# and to monitoring software that tracks cursor velocity.
+mouse.smooth=false
+
+# Periodic left-click at current cursor position. Fires independently of the
+# mouse move cycle. Useful for keeping chat apps (Slack, Teams, Zoom) green.
+mouse.click.enabled=false
+mouse.click.min.seconds=120
+mouse.click.max.seconds=300
+
 # Human-pattern simulation: varies move interval ±20%, step size 50-150%, adds
 # micro-jitter (±2px), and occasionally skips a tick (10% chance) to mimic
 # natural mouse behaviour. Recommended with profile=stealth or keep-awake.
